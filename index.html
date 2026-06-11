@@ -1,0 +1,276 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuantX Audit | Strategy Validator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #f1f5f9; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
+        .gradient-text { background: linear-gradient(45deg, #818cf8, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .loader { border-top-color: #818cf8; animation: spinner 1.5s linear infinite; }
+        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-12">
+            <div>
+                <h1 class="text-4xl font-bold gradient-text">QuantX Audit</h1>
+                <p class="text-slate-400" id="tagline">Professional Strategy Validation System</p>
+            </div>
+            <div class="flex gap-2 glass p-1 rounded-lg">
+                <button onclick="setLang('en')" id="btn-en" class="px-3 py-1 rounded-md transition bg-indigo-600 text-white">EN</button>
+                <button onclick="setLang('zh')" id="btn-zh" class="px-3 py-1 rounded-md transition text-slate-400">中文</button>
+            </div>
+        </header>
+
+        <!-- Input Section -->
+        <section class="glass rounded-3xl p-6 mb-8">
+            <label class="block text-sm font-medium text-slate-400 mb-2" id="label-input">Enter YouTube URL, Transcript or Strategy Text</label>
+            <div class="flex gap-4">
+                <textarea id="strategy-input" class="flex-1 bg-slate-900 border border-slate-700 rounded-2xl p-4 text-white focus:ring-2 focus:ring-indigo-500 outline-none transition h-32" placeholder="Example: I trade NVDA with a 20 EMA crossover..."></textarea>
+                <button onclick="startAnalysis()" id="btn-analyze" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-8 rounded-2xl transition-all transform hover:scale-105 flex flex-col justify-center items-center gap-2">
+                    <span id="text-analyze">Analyze</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                </button>
+            </div>
+        </section>
+
+        <!-- Loading State -->
+        <div id="loading" class="hidden flex flex-col items-center justify-center py-20">
+            <div class="loader ease-linear rounded-full border-4 border-t-4 border-slate-700 h-12 w-12 mb-4"></div>
+            <p class="text-indigo-400 font-medium animate-pulse" id="loading-text">Analyzing strategy and stress testing...</p>
+        </div>
+
+        <!-- Result Section -->
+        <div id="results" class="hidden space-y-8">
+            <!-- Verdict Banner -->
+            <div id="verdict-banner" class="rounded-3xl p-8 text-center transition-all duration-500">
+                <h2 class="text-6xl font-black mb-2" id="verdict-text">PASS</h2>
+                <p class="text-xl opacity-90" id="verdict-subtext">Strategy is robust and outperforms random baseline.</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Left: Metrics -->
+                <div class="lg:col-span-1 space-y-8">
+                    <div class="glass rounded-3xl p-6">
+                        <h3 class="text-lg font-semibold mb-4 text-indigo-300" id="title-metrics">Key Performance</h3>
+                        <div id="metrics-grid" class="grid grid-cols-1 gap-4">
+                            <!-- JS injected metrics -->
+                        </div>
+                    </div>
+                    <div class="glass rounded-3xl p-6">
+                        <h3 class="text-lg font-semibold mb-4 text-indigo-300" id="title-stress">Stress Test</h3>
+                        <div id="stress-grid" class="grid grid-cols-1 gap-4">
+                            <!-- JS injected stress tests -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Charts & Details -->
+                <div class="lg:col-span-2 space-y-8">
+                    <div class="glass rounded-3xl p-6">
+                        <h3 class="text-lg font-semibold mb-4 text-indigo-300" id="title-chart">Equity Curve (OOS)</h3>
+                        <div id="equity-chart" class="w-full h-80"></div>
+                    </div>
+                    <div class="glass rounded-3xl p-6">
+                        <h3 class="text-lg font-semibold mb-4 text-indigo-300" id="title-assumptions">Critical Assumptions</h3>
+                        <ul id="assumptions-list" class="space-y-2 text-slate-400 list-disc pl-5">
+                            <!-- JS injected assumptions -->
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const i18n = {
+            en: {
+                tagline: "Professional Strategy Validation System",
+                labelInput: "Enter YouTube URL, Transcript or Strategy Text",
+                btnAnalyze: "Analyze",
+                loading: "Analyzing strategy and stress testing...",
+                titleMetrics: "Key Performance",
+                titleStress: "Stress Test",
+                titleChart: "Equity Curve (OOS)",
+                titleAssumptions: "Critical Assumptions",
+                verdictPass: "PASS",
+                verdictFail: "FAIL",
+                passSub: "Strategy is robust and outperforms random baseline.",
+                failSub: "Strategy failed stress tests or lacked stability.",
+                metrics: {
+                    "Total Return": "Total Return",
+                    "CAGR": "Annual Growth (CAGR)",
+                    "Max Drawdown": "Max Drawdown",
+                    "Sharpe Ratio": "Sharpe Ratio",
+                    "Win Rate": "Win Rate",
+                    "Total Trades": "Total Trades",
+                    "Alpha (vs Bench)": "Alpha vs Benchmark"
+                },
+                stress: {
+                    "is_stable": "Parameter Stability",
+                    "p_value": "P-Value (vs Random)",
+                    "worst_mdd": "Monte Carlo Worst MDD"
+                },
+                stableYes: "Stable", stableNo: "Unstable",
+                significant: "Significant", insignificant: "Not Significant"
+            },
+            zh: {
+                tagline: "專業量化策略驗證系統",
+                labelInput: "請輸入 YouTube 連結、逐字稿或交易策略文字",
+                btnAnalyze: "開始審核",
+                loading: "正在分析策略並執行壓力測試...",
+                titleMetrics: "核心績效指標",
+                titleStress: "壓力測試結果",
+                titleChart: "資產曲線 (樣本外測試)",
+                titleAssumptions: "關鍵假設 (缺失資訊)",
+                verdictPass: "通過",
+                verdictFail: "不通過",
+                passSub: "策略表現穩健且顯著優於隨機基準。",
+                failSub: "策略未通過壓力測試或缺乏穩定性。",
+                metrics: {
+                    "Total Return": "總回報",
+                    "CAGR": "年化增長率",
+                    "Max Drawdown": "最大回撤",
+                    "Sharpe Ratio": "夏普比率",
+                    "Win Rate": "勝率",
+                    "Total Trades": "交易總次數",
+                    "Alpha (vs Bench)": "對標超額回報"
+                },
+                stress: {
+                    "is_stable": "參數穩定性",
+                    "p_value": "P-Value (對比隨機)",
+                    "worst_mdd": "蒙地卡羅最差回撤"
+                },
+                stableYes: "穩定", stableNo: "不穩定",
+                significant: "顯著", insignificant: "不顯著"
+            }
+        };
+
+        let currentLang = 'en';
+
+        function setLang(lang) {
+            currentLang = lang;
+            document.getElementById('btn-en').className = lang === 'en' ? 'px-3 py-1 rounded-md transition bg-indigo-600 text-white' : 'px-3 py-1 rounded-md transition text-slate-400';
+            document.getElementById('btn-zh').className = lang === 'zh' ? 'px-3 py-1 rounded-md transition bg-indigo-600 text-white' : 'px-3 py-1 rounded-md transition text-slate-400';
+            
+            document.getElementById('tagline').innerText = i18n[lang].tagline;
+            document.getElementById('label-input').innerText = i18n[lang].labelInput;
+            document.getElementById('text-analyze').innerText = i18n[lang].btnAnalyze;
+            document.getElementById('loading-text').innerText = i18n[lang].loading;
+            document.getElementById('title-metrics').innerText = i18n[lang].titleMetrics;
+            document.getElementById('title-stress').innerText = i18n[lang].titleStress;
+            document.getElementById('title-chart').innerText = i18n[lang].titleChart;
+            document.getElementById('title-assumptions').innerText = i18n[lang].titleAssumptions;
+        }
+
+        async function startAnalysis() {
+            const input = document.getElementById('strategy-input').value;
+            if (!input) return alert("Please enter some text first!");
+
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('results').classList.add('hidden');
+            
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ input_text: input, language: currentLang })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || "Analysis failed");
+                
+                renderResults(data);
+            } catch (e) {
+                alert("Error: " + e.message);
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+
+        function renderResults(data) {
+            const resultsDiv = document.getElementById('results');
+            const banner = document.getElementById('verdict-banner');
+            const vText = document.getElementById('verdict-text');
+            const vSub = document.getElementById('verdict-subtext');
+            
+            resultsDiv.classList.remove('hidden');
+            
+            // Verdict
+            if (data.verdict === 'PASS') {
+                banner.className = "rounded-3xl p-8 text-center transition-all duration-500 bg-emerald-600 text-white shadow-lg shadow-emerald-900/20";
+                vText.innerText = i18n[currentLang].verdictPass;
+                vSub.innerText = i18n[currentLang].passSub;
+            } else {
+                banner.className = "rounded-3xl p-8 text-center transition-all duration-500 bg-rose-600 text-white shadow-lg shadow-rose-900/20";
+                vText.innerText = i18n[currentLang].verdictFail;
+                vSub.innerText = i18n[currentLang].failSub;
+            }
+
+            // Metrics
+            const metricsGrid = document.getElementById('metrics-grid');
+            metricsGrid.innerHTML = '';
+            for (const [k, v] of Object.entries(data.metrics)) {
+                const label = i18n[currentLang].metrics[k] || k;
+                metricsGrid.innerHTML += `
+                    <div class="flex justify-between items-center p-3 bg-slate-900/50 rounded-xl border border-slate-800">
+                        <span class="text-slate-400">${label}</span>
+                        <span class="font-mono font-bold text-indigo-300">${v}</span>
+                    </div>`;
+            }
+
+            // Stress Test
+            const stressGrid = document.getElementById('stress-grid');
+            stressGrid.innerHTML = '';
+            const s = data.stress_test;
+            const sLabels = i18n[currentLang].stress;
+            
+            stressGrid.innerHTML += `
+                <div class="flex justify-between items-center p-3 bg-slate-900/50 rounded-xl border border-slate-800">
+                    <span class="text-slate-400">${sLabels.is_stable}</span>
+                    <span class="font-bold ${s.is_stable ? 'text-emerald-400' : 'text-rose-400'}">${s.is_stable ? i18n[currentLang].stableYes : i18n[currentLang].stableNo}</span>
+                </div>
+                <div class="flex justify-between items-center p-3 bg-slate-900/50 rounded-xl border border-slate-800">
+                    <span class="text-slate-400">${sLabels.p_value}</span>
+                    <span class="font-mono font-bold text-indigo-300">${s.p_value.toFixed(4)} (${s.p_value < 0.05 ? i18n[currentLang].significant : i18n[currentLang].insignificant})</span>
+                </div>
+                <div class="flex justify-between items-center p-3 bg-slate-900/50 rounded-xl border border-slate-800">
+                    <span class="text-slate-400">${sLabels.worst_mdd}</span>
+                    <span class="font-mono font-bold text-rose-300">${s.worst_mdd}</span>
+                </div>`;
+
+            // Assumptions
+            const aList = document.getElementById('assumptions-list');
+            aList.innerHTML = '';
+            data.assumptions.forEach(a => {
+                aList.innerHTML += `<li>${a}</li>`;
+            });
+
+            // Chart
+            Plotly.newPlot('equity-chart', [{
+                x: data.equity_curve.dates,
+                y: data.equity_curve.values,
+                type: 'scatter',
+                mode: 'lines',
+                line: { color: '#818cf8', width: 3 },
+                fill: 'tozeroy',
+                fillcolor: 'rgba(129, 140, 248, 0.1)'
+            }], {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                margin: { t: 10, r: 10, b: 40, l: 40 },
+                xaxis: { gridcolor: '#1e293b', tickfont: { color: '#64748b' } },
+                yaxis: { gridcolor: '#1e293b', tickfont: { color: '#64748b' } },
+                showlegend: false
+            });
+        }
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a09f34cc5a5d313b',t:'MTc4MTE2NjEyOA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
